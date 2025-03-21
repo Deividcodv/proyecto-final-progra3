@@ -1,1 +1,168 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Colas Bancarias</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            text-align: center;
+        }
+        .options {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin: 30px 0;
+        }
+        .option-btn {
+            padding: 15px 30px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+        .option-btn:hover {
+            background-color: #45a049;
+        }
+        .ticket-info {
+            margin-top: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            display: none;
+        }
+        .ticket-number {
+            font-size: 32px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .status-container {
+            margin-top: 40px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        table, th, td {
+            border: 1px solid #ddd;
+        }
+        th, td {
+            padding: 12px;
+            text-align: center;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Bienvenido al Sistema de Colas Bancarias</h1>
+        <p>Por favor, seleccione el servicio que necesita:</p>
+        
+        <div class="options">
+            <button class="option-btn" onclick="obtenerTicket('caja')">Caja</button>
+            <button class="option-btn" onclick="obtenerTicket('servicio_cliente')">Servicio al Cliente</button>
+        </div>
+        
+        <div id="ticketInfo" class="ticket-info">
+            <h2>Su ticket</h2>
+            <div class="ticket-number" id="ticketNumber"></div>
+            <p>Posición en la cola: <span id="position"></span></p>
+            <p>Tiempo estimado de espera: <span id="waitTime"></span> segundos</p>
+        </div>
+        
+        <div class="status-container">
+            <h2>Estado de las Colas</h2>
+            <button onclick="actualizarEstadoColas()">Actualizar</button>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Servicio</th>
+                        <th>Personas en Espera</th>
+                        <th>Agentes Disponibles</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Caja</td>
+                        <td id="cajaCola">0</td>
+                        <td id="cajaDisponibles">0</td>
+                    </tr>
+                    <tr>
+                        <td>Servicio al Cliente</td>
+                        <td id="servicioCola">0</td>
+                        <td id="servicioDisponibles">0</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
 
+    <script>
+        // URL base del API
+        const API_URL = 'http://localhost:5000';
+        
+        // Función para obtener un nuevo ticket
+        async function obtenerTicket(tipoServicio) {
+            try {
+                const response = await fetch(`${API_URL}/nuevo-ticket`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ tipo_servicio: tipoServicio })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    // Mostrar información del ticket
+                    document.getElementById('ticketNumber').textContent = data.ticket;
+                    document.getElementById('position').textContent = data.posicion;
+                    document.getElementById('waitTime').textContent = data.tiempo_estimado;
+                    document.getElementById('ticketInfo').style.display = 'block';
+                    
+                    // Actualizar estado de las colas
+                    actualizarEstadoColas();
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Ocurrió un error. Por favor, intente de nuevo.');
+            }
+        }
+        
+        // Función para actualizar el estado de las colas
+        async function actualizarEstadoColas() {
+            try {
+                const response = await fetch(`${API_URL}/estado-colas`);
+                const data = await response.json();
+                
+                document.getElementById('cajaCola').textContent = data.caja.personas_esperando;
+                document.getElementById('cajaDisponibles').textContent = data.caja.cajeros_disponibles;
+                document.getElementById('servicioCola').textContent = data.servicio_cliente.personas_esperando;
+                document.getElementById('servicioDisponibles').textContent = data.servicio_cliente.agentes_disponibles;
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        }
+        
+        // Actualizar el estado de las colas al cargar la página
+        window.onload = actualizarEstadoColas;
+    </script>
+</body>
+</html>
