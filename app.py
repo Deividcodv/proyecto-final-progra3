@@ -5,53 +5,71 @@ from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 import threading
 import queue
+from datetime import datetime
+from flask_socketio import SocketIO
 
-app = Flask(__name__)
-CORS(app)  # Esto permite solicitudes CORS
+app = Flask(__name__, template_folder='templates')
+CORS(app)
+socketio = SocketIO(app, cors_allowed_origins="*")
 
-# Colas para cada servicio
+# Database for tracking clients
+clients_db = {}
+db_lock = threading.Lock()
+
+# Queue and counter setup
 cola_caja = queue.Queue()
 cola_servicio_cliente = queue.Queue()
-
-# Contadores para números de ticket
 contador_caja = 1
 contador_servicio = 1
-
-# Semáforo para proteger acceso a contadores
 contador_lock = threading.Lock()
-
-# Estado de los cajeros
-cajeros_disponibles = 2  # Puedes ajustar este número
-servicio_cliente_disponibles = 1  # Puedes ajustar este número
-
+cajeros_disponibles = 2
+servicio_cliente_disponibles = 1
 cajeros_lock = threading.Lock()
 servicio_lock = threading.Lock()
 
-# Función para procesar cliente en caja
+def generate_ticket(tipo_servicio):
+    global contador_caja, contador_servicio
+    with contador_lock:
+        if tipo_servicio == 'caja':
+            numero_ticket = contador_caja
+            contador_caja += 1
+            cola_caja.put(numero_ticket)
+            posicion = cola_caja.qsize()
+            tiempo_estimado = posicion * 7.5
+            prefijo = 'C'
+        else:  # servicio_cliente
+            numero_ticket = contador_servicio
+            contador_servicio += 1
+            cola_servicio_cliente.put(numero_ticket)
+            posicion = cola_servicio_cliente.qsize()
+            tiempo_estimado = posicion * 11
+            prefijo = 'S'
+    
+    ticket_formateado = f"{prefijo}{numero_ticket:03d}"
+    return ticket_formateado, posicion, int(tiempo_estimado)
+
+# Existing processing functions (procesar_caja, procesar_servicio)
 def procesar_caja(numero_ticket):
     tiempo_atencion = random.randint(5, 10)
     print(f"Procesando ticket {numero_ticket} en CAJA - tiempo estimado: {tiempo_atencion} segundos")
     time.sleep(tiempo_atencion)
     print(f"Ticket {numero_ticket} de CAJA ha sido atendido.")
-    
-    # Liberar cajero
     global cajeros_disponibles
     with cajeros_lock:
         cajeros_disponibles += 1
+    socketio.emit('queue_update', get_queue_status())
 
-# Función para procesar cliente en servicio al cliente
 def procesar_servicio(numero_ticket):
     tiempo_atencion = random.randint(7, 15)
     print(f"Procesando ticket {numero_ticket} en SERVICIO AL CLIENTE - tiempo estimado: {tiempo_atencion} segundos")
     time.sleep(tiempo_atencion)
     print(f"Ticket {numero_ticket} de SERVICIO AL CLIENTE ha sido atendido.")
-    
-    # Liberar servicio al cliente
     global servicio_cliente_disponibles
     with servicio_lock:
         servicio_cliente_disponibles += 1
+    socketio.emit('queue_update', get_queue_status())
 
-# Hilo para monitorear la cola de caja
+# Queue monitoring threads
 def monitor_cola_caja():
     while True:
         global cajeros_disponibles
@@ -60,11 +78,9 @@ def monitor_cola_caja():
                 if cajeros_disponibles > 0:
                     cajeros_disponibles -= 1
                     ticket = cola_caja.get()
-                    # Iniciar un hilo para atender este cliente
                     threading.Thread(target=procesar_caja, args=(ticket,)).start()
-        time.sleep(1)  # Revisar cada segundo
+        time.sleep(1)
 
-# Hilo para monitorear la cola de servicio al cliente
 def monitor_cola_servicio():
     while True:
         global servicio_cliente_disponibles
@@ -73,71 +89,69 @@ def monitor_cola_servicio():
                 if servicio_cliente_disponibles > 0:
                     servicio_cliente_disponibles -= 1
                     ticket = cola_servicio_cliente.get()
-                    # Iniciar un hilo para atender este cliente
                     threading.Thread(target=procesar_servicio, args=(ticket,)).start()
-        time.sleep(1)  # Revisar cada segundo
+        time.sleep(1)
 
-# Ruta principal
+# API Endpoints
 @app.route('/')
 def index():
     return render_template('index.html')
 
-# Endpoint para obtener un nuevo ticket
-@app.route('/nuevo-ticket', methods=['POST'])
-def nuevo_ticket():
+@app.route('/api/ticket', methods=['POST'])
+def external_ticket():
     data = request.json
-    tipo_servicio = data.get('tipo_servicio')
+    if not data or 'tipo_servicio' not in data:
+        return jsonify({'error': 'Invalid request'}), 400
     
-    global contador_caja, contador_servicio
+    client_id = data.get('client_id', f"EXT-{random.randint(1000,9999)}")
+    ticket, pos, wait = generate_ticket(data['tipo_servicio'])
     
-    if tipo_servicio == 'caja':
-        with contador_lock:
-            numero_ticket = contador_caja
-            contador_caja += 1
-        cola_caja.put(numero_ticket)
-        posicion = cola_caja.qsize()
-        tiempo_estimado = posicion * 7.5  # Promedio entre 5 y 10 segundos
-        prefijo = 'C'
+    with db_lock:
+        clients_db[client_id] = {
+            'ticket': ticket,
+            'status': 'waiting',
+            'timestamp': datetime.now().isoformat(),
+            'service': data['tipo_servicio']
+        }
     
-    elif tipo_servicio == 'servicio_cliente':
-        with contador_lock:
-            numero_ticket = contador_servicio
-            contador_servicio += 1
-        cola_servicio_cliente.put(numero_ticket)
-        posicion = cola_servicio_cliente.qsize()
-        tiempo_estimado = posicion * 11  # Promedio entre 7 y 15 segundos
-        prefijo = 'S'
-    
-    else:
-        return jsonify({'error': 'Tipo de servicio no válido'}), 400
-    
-    # Formatear el número de ticket (por ejemplo, C001 o S001)
-    ticket_formateado = f"{prefijo}{numero_ticket:03d}"
-    
+    socketio.emit('queue_update', get_queue_status())
     return jsonify({
-        'ticket': ticket_formateado,
-        'posicion': posicion,
-        'tiempo_estimado': int(tiempo_estimado)
+        'ticket': ticket,
+        'position': pos,
+        'wait_time': wait,
+        'client_id': client_id
     })
 
-# Endpoint para verificar el estado de las colas
-@app.route('/estado-colas', methods=['GET'])
-def estado_colas():
-    return jsonify({
+@app.route('/api/attended/<client_id>', methods=['POST'])
+def mark_attended(client_id):
+    with db_lock:
+        if client_id in clients_db:
+            clients_db[client_id]['status'] = 'attended'
+            clients_db[client_id]['attended_at'] = datetime.now().isoformat()
+            socketio.emit('attended_update', {'client_id': client_id})
+            return jsonify({'status': 'success'})
+    return jsonify({'error': 'Client not found'}), 404
+
+@app.route('/api/status/<client_id>', methods=['GET'])
+def client_status(client_id):
+    with db_lock:
+        if client_id in clients_db:
+            return jsonify(clients_db[client_id])
+    return jsonify({'error': 'Client not found'}), 404
+
+def get_queue_status():
+    return {
         'caja': {
-            'personas_esperando': cola_caja.qsize(),
-            'cajeros_disponibles': cajeros_disponibles
+            'waiting': cola_caja.qsize(),
+            'available': cajeros_disponibles
         },
         'servicio_cliente': {
-            'personas_esperando': cola_servicio_cliente.qsize(),
-            'agentes_disponibles': servicio_cliente_disponibles
+            'waiting': cola_servicio_cliente.qsize(),
+            'available': servicio_cliente_disponibles
         }
-    })
+    }
 
 if __name__ == '__main__':
-    # Iniciar hilos para monitorear colas
     threading.Thread(target=monitor_cola_caja, daemon=True).start()
     threading.Thread(target=monitor_cola_servicio, daemon=True).start()
-    
-    print("Sistema de colas iniciado!")
-    app.run(debug=True, port=5000)
+    socketio.run(app, debug=True, port=5000)
