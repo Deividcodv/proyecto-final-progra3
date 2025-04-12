@@ -12,11 +12,11 @@ app = Flask(__name__, template_folder='templetes')
 CORS(app)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-# Database for tracking clients
+# Traqueo de clientes
 clients_db = {}
 db_lock = threading.Lock()
 
-# Queue and counter setup
+# cola inicializacion
 cola_caja = queue.Queue()
 cola_servicio_cliente = queue.Queue()
 contador_caja = 1
@@ -48,7 +48,7 @@ def generate_ticket(tipo_servicio):
     ticket_formateado = f"{prefijo}{numero_ticket:03d}"
     return ticket_formateado, posicion, int(tiempo_estimado)
 
-# Existing processing functions (procesar_caja, procesar_servicio)
+# procesar funciones existentes (procesar_caja, procesar_servicio)
 def procesar_caja(numero_ticket):
     tiempo_atencion = random.randint(5, 10)
     print(f"Procesando ticket {numero_ticket} en CAJA - tiempo estimado: {tiempo_atencion} segundos")
@@ -69,7 +69,7 @@ def procesar_servicio(numero_ticket):
         servicio_cliente_disponibles += 1
     socketio.emit('queue_update', get_queue_status())
 
-# Queue monitoring threads
+# Monitoreo de colas
 def monitor_cola_caja():
     while True:
         global cajeros_disponibles
