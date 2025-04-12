@@ -25,7 +25,7 @@
                 </button>
             </div>
 
-            <!-- Ticket Info -->
+            
             <div id="ticketInfo" class="hidden bg-blue-50 p-4 rounded-lg mb-8">
                 <h2 class="text-xl font-semibold mb-2">Su ticket</h2>
                 <div class="flex items-center justify-between">
@@ -41,7 +41,7 @@
                 <div id="qrCode" class="mt-4 flex justify-center"></div>
             </div>
 
-            <!-- Queue Status -->
+            <!-- Estado Cola-->
             <div class="bg-white border border-gray-200 rounded-lg p-4">
                 <h2 class="text-xl font-semibold mb-4 flex items-center justify-between">
                     <span>Estado de las Colas</span>
@@ -49,7 +49,7 @@
                 </h2>
                 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <!-- Caja Status -->
+                    <!-- Caja Estado -->
                     <div class="border border-gray-200 rounded-lg p-4">
                         <h3 class="font-medium text-lg mb-2 flex items-center">
                             <i class="fas fa-cash-register text-blue-600 mr-2"></i>Caja
@@ -63,7 +63,7 @@
                         </div>
                     </div>
 
-                    <!-- Servicio Status -->
+                    <!-- Servicio Estado -->
                     <div class="border border-gray-200 rounded-lg p-4">
                         <h3 class="font-medium text-lg mb-2 flex items-center">
                             <i class="fas fa-headset text-green-600 mr-2"></i>Servicio al Cliente
@@ -79,7 +79,7 @@
                 </div>
             </div>
 
-            <!-- Recent Attended -->
+            <!-- Atendidos Recientemente -->
             <div id="recentAttended" class="mt-6 hidden">
                 <h3 class="text-lg font-medium mb-2">Recientemente atendidos</h3>
                 <div id="attendedList" class="space-y-2"></div>
@@ -91,19 +91,19 @@
         const socket = io({path: '/socket.io'});
         let currentClientId = null;
 
-        // Connect to Socket.IO
+        // Conexiones al Socket.IO
         socket.on('connect', () => {
             console.log('Connected to server');
             updateQueueStatus();
         });
 
-        // Handle real-time queue updates
+        // Manejo de la cola en live
         socket.on('queue_update', (data) => {
             updateQueueUI(data);
             updateTimestamp();
         });
 
-        // Handle attended client updates
+        // Maneja las actualizaciones 
         socket.on('attended_update', (data) => {
             if (data.client_id === currentClientId) {
                 document.getElementById('statusBadge').textContent = 'Atendido';
@@ -112,7 +112,7 @@
             showAttendedClient(data.client_id);
         });
 
-        // Get a new ticket
+        // Obtener un nuevo ticket
         async function getTicket(tipoServicio) {
             try {
                 const response = await fetch('/api/ticket', {
@@ -138,14 +138,14 @@
             }
         }
 
-        // Display ticket information
+        // Mostrar información del ticket
         function showTicketInfo(data) {
             document.getElementById('ticketNumber').textContent = data.ticket;
             document.getElementById('position').textContent = data.position;
             document.getElementById('waitTime').textContent = data.wait_time;
             document.getElementById('ticketInfo').classList.remove('hidden');
             
-            // Generate QR code (placeholder)
+            
             document.getElementById('qrCode').innerHTML = `
                 <div class="bg-gray-200 p-2 rounded">
                     <div class="text-center text-xs">Scan for updates</div>
@@ -154,28 +154,28 @@
             `;
         }
 
-        // Update queue status display
+        // Actualizar estado de la cola
         function updateQueueUI(data) {
             document.getElementById('cajaCola').textContent = data.caja.waiting;
             document.getElementById('cajaDisponibles').textContent = data.caja.available;
             document.getElementById('servicioCola').textContent = data.servicio_cliente.waiting;
             document.getElementById('servicioDisponibles').textContent = data.servicio_cliente.available;
 
-            // Update status indicators
+            // Actualiza el estado de los indicadores 
             document.getElementById('cajaStatus').className = 
                 data.caja.available > 0 ? 'w-3 h-3 rounded-full bg-green-500' : 'w-3 h-3 rounded-full bg-red-500';
             document.getElementById('servicioStatus').className = 
                 data.servicio_cliente.available > 0 ? 'w-3 h-3 rounded-full bg-green-500' : 'w-3 h-3 rounded-full bg-red-500';
         }
 
-        // Update timestamp
+        
         function updateTimestamp() {
             const now = new Date();
             document.getElementById('lastUpdate').textContent = 
                 `Actualizado: ${now.toLocaleTimeString()}`;
         }
 
-        // Check client status periodically
+        // Revisa estado de cliente constantemente 
         function startStatusCheck(clientId) {
             const interval = setInterval(async () => {
                 const response = await fetch(`/api/status/${clientId}`);
@@ -190,7 +190,7 @@
             }, 5000);
         }
 
-        // Show attended clients
+    
         async function showAttendedClient(clientId) {
             const response = await fetch(`/api/status/${clientId}`);
             if (response.ok) {
@@ -207,7 +207,7 @@
             }
         }
 
-        // Initial queue status update
+        
         async function updateQueueStatus() {
             try {
                 const response = await fetch('/estado-colas');
@@ -221,7 +221,7 @@
             }
         }
 
-        // Initial setup
+        // Inicio
         document.addEventListener('DOMContentLoaded', () => {
             updateQueueStatus();
         });
