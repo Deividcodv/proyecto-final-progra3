@@ -13,7 +13,7 @@ CORS(app)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Traqueo de clientes
-clients_db = {}
+clientes_db = {}
 db_lock = threading.Lock()
 
 # cola inicializacion
@@ -103,11 +103,11 @@ def external_ticket():
     if not data or 'tipo_servicio' not in data:
         return jsonify({'error': 'Invalid request'}), 400
     
-    client_id = data.get('client_id', f"EXT-{random.randint(1000,9999)}")
+    cliente_id = data.get('cliente_id', f"EXT-{random.randint(1000,9999)}")
     ticket, pos, wait = generate_ticket(data['tipo_servicio'])
     
     with db_lock:
-        clients_db[client_id] = {
+        clientes_db[cliente_id] = {
             'ticket': ticket,
             'status': 'waiting',
             'timestamp': datetime.now().isoformat(),
@@ -119,24 +119,24 @@ def external_ticket():
         'ticket': ticket,
         'position': pos,
         'wait_time': wait,
-        'client_id': client_id
+        'cliente_id': cliente_id
     })
 
-@app.route('/api/attended/<client_id>', methods=['POST'])
-def mark_attended(client_id):
+@app.route('/api/attended/<cliente_id>', methods=['POST'])
+def mark_attended(cliente_id):
     with db_lock:
-        if client_id in clients_db:
-            clients_db[client_id]['status'] = 'attended'
-            clients_db[client_id]['attended_at'] = datetime.now().isoformat()
-            socketio.emit('attended_update', {'client_id': client_id})
+        if cliente_id in clientes_db:
+            clientes_db[cliente_id]['status'] = 'attended'
+            clientes_db[cliente_id]['attended_at'] = datetime.now().isoformat()
+            socketio.emit('attended_update', {'cliente_id': cliente_id})
             return jsonify({'status': 'success'})
     return jsonify({'error': 'Client not found'}), 404
 
-@app.route('/api/status/<client_id>', methods=['GET'])
-def client_status(client_id):
+@app.route('/api/status/<cliente_id>', methods=['GET'])
+def client_status(cliente_id):
     with db_lock:
-        if client_id in clients_db:
-            return jsonify(clients_db[client_id])
+        if cliente_id in clientes_db:
+            return jsonify(clientes_db[cliente_id])
     return jsonify({'error': 'Client not found'}), 404
 
 def get_queue_status():
